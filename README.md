@@ -1,30 +1,25 @@
-# codecrack-backend
-# CodeCrack 🚀
+ # 🚀 CodeCrack Backend
 
-## Overview
-AI-powered coding platform backend with scalable architecture.
+A scalable backend system for an online coding platform.
 
-## Tech Stack
-- Spring Boot
-- Redis (Caching)
-- RabbitMQ (Async processing)
-- Docker
-- H2 / PostgreSQL
+## 🔥 Features
 
-## Features
-- Code submission queue (async processing)
-- Priority queue support
-- Dead Letter Queue (DLQ)
-- Retry mechanism
-- JWT Authentication
+- Async code execution using RabbitMQ
+- Redis caching for performance
+- JWT-based authentication
 - Rate limiting
-- Metrics & Monitoring (Prometheus-ready)
+- Monitoring with Actuator & Prometheus
+- Dockerized architecture
 
-## Architecture
-(mention flow)
+## 🏗️ Architecture
 
-User → API → Queue → Worker → Result → Cache
+User → API → Queue → Worker → Execution → DB + Cache
 
-## Run Locally
-docker-compose up -d
+## 🛠️ Tech Stack
+
+Java, Spring Boot, Redis, RabbitMQ, Docker
+
+## 🚀 Run
+
+docker-compose up -d  
 mvn spring-boot:run
