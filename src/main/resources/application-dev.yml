@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:codecrack;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+
+  # Override Redis - no password for dev container
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password:
+
+  # Override RabbitMQ - use guest/guest for dev container
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+logging:
+  level:
+    com.codecrack: DEBUG
+    org.springframework.security: DEBUG
