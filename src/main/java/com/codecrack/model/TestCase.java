@@ -1,5 +1,7 @@
 package com.codecrack.model;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -9,6 +11,7 @@ import lombok.*;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonDeserialize(builder = TestCase.TestCaseBuilder.class)
 public class TestCase {
 
     @Id
@@ -35,4 +38,8 @@ public class TestCase {
 
     @Column(nullable = false)
     private Integer orderIndex = 0;
+
+    @JsonPOJOBuilder(withPrefix = "")
+    public static class TestCaseBuilder {
+    }
 }

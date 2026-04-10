@@ -58,7 +58,7 @@ public class SubmissionService {
                 .problemId(problemId)
                 .build();
 
-        rabbitTemplate.convertAndSend(submissionsQueue, request);
+        rabbitTemplate.convertAndSend(submissionsQueue, submission.getId());
         log.info("Queued submission {} for execution", submission.getId());
 
         return submission;

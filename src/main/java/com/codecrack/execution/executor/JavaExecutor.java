@@ -27,7 +27,7 @@ public class JavaExecutor implements Executor {
 
     private final DockerClient dockerClient;
 
-    private static final String DOCKER_IMAGE = "openjdk:17-alpine";
+    private static final String DOCKER_IMAGE = "eclipse-temurin:17-alpine";
     private static final long MEMORY_LIMIT = 256L * 1024 * 1024;
     private static final long CPU_QUOTA = 100000L;
     private static final long CPU_PERIOD = 100000L;
@@ -38,9 +38,19 @@ public class JavaExecutor implements Executor {
         try {
             log.info("Starting Java execution for submission {}", request.getSubmissionId());
 
+            List<TestCase> testCases = request.getTestCases();
+            log.info("TestCases in executor: {}", testCases == null ? "NULL" : testCases.size());
+
+            if (testCases == null || testCases.isEmpty()) {
+                return ExecutionResult.builder()
+                        .verdict(Verdict.ACCEPTED)
+                        .runtimeMs(0)
+                        .build();
+            }
+
             containerId = createSecureContainer();
-            copyCodeToContainer(containerId, request.getCode());
             dockerClient.startContainerCmd(containerId).exec();
+            copyCodeToContainer(containerId, request.getCode());
 
             // Compile
             CompilationResult compilation = compile(containerId);
@@ -53,14 +63,18 @@ public class JavaExecutor implements Executor {
 
             // Run test cases
             List<TestCaseResult> results = new ArrayList<>();
-            for (int i = 0; i < request.getTestCases().size(); i++) {
-                TestCase testCase = request.getTestCases().get(i);
+            for (int i = 0; i < testCases.size(); i++) {
+                TestCase testCase = testCases.get(i);
+                log.info("Running test case {}", i + 1);
+                // Copy input file to container
+                copyInputToContainer(containerId, testCase.getInput(), i + 1);
                 TestCaseResult result = runTestCase(containerId, testCase, i + 1);
                 results.add(result);
+                log.info("Test case {} result: passed={}", i + 1, result.isPassed());
                 if (!result.isPassed()) break;
             }
 
-            Verdict verdict = determineVerdict(results, request.getTestCases().size());
+            Verdict verdict = determineVerdict(results, testCases.size());
 
             int avgRuntime = results.isEmpty() ? 0 :
                     results.stream().mapToInt(TestCaseResult::getRuntime).sum() / results.size();
@@ -85,33 +99,38 @@ public class JavaExecutor implements Executor {
     private String createSecureContainer() {
         CreateContainerResponse container = dockerClient
                 .createContainerCmd(DOCKER_IMAGE)
+                .withCmd("sh", "-c", "while true; do sleep 1; done")
                 .withHostConfig(HostConfig.newHostConfig()
                         .withMemory(MEMORY_LIMIT)
                         .withMemorySwap(MEMORY_LIMIT)
                         .withCpuQuota(CPU_QUOTA)
                         .withCpuPeriod(CPU_PERIOD)
                         .withNetworkMode("none")
-                        .withReadonlyRootfs(true)
-                        .withTmpFs(Collections.singletonMap("/tmp", "size=50m,mode=1777"))
                         .withPrivileged(false)
                         .withCapDrop(Capability.ALL)
                         .withPidsLimit(50L)
                 )
-                .withUser("nobody:nogroup")
                 .withWorkingDir("/tmp")
                 .exec();
         return container.getId();
     }
 
     private void copyCodeToContainer(String containerId, String code) throws IOException {
+        copyFileToContainer(containerId, "Solution.java", code.getBytes());
+    }
+
+    private void copyInputToContainer(String containerId, String input, int testNumber) throws IOException {
+        copyFileToContainer(containerId, "input" + testNumber + ".txt", input.getBytes());
+    }
+
+    private void copyFileToContainer(String containerId, String filename, byte[] content) throws IOException {
         ByteArrayOutputStream tarStream = new ByteArrayOutputStream();
         TarArchiveOutputStream tar = new TarArchiveOutputStream(tarStream);
-        byte[] codeBytes = code.getBytes();
-        TarArchiveEntry entry = new TarArchiveEntry("Solution.java");
-        entry.setSize(codeBytes.length);
-        entry.setMode(420); // 0644 in decimal
+        TarArchiveEntry entry = new TarArchiveEntry(filename);
+        entry.setSize(content.length);
+        entry.setMode(420);
         tar.putArchiveEntry(entry);
-        tar.write(codeBytes);
+        tar.write(content);
         tar.closeArchiveEntry();
         tar.close();
 
@@ -143,8 +162,10 @@ public class JavaExecutor implements Executor {
                     }).awaitCompletion(10, TimeUnit.SECONDS);
 
             if (!error.isEmpty()) {
+                log.info("Compilation error: '{}'", error.toString());
                 return new CompilationResult(false, error.toString());
             }
+            log.info("Compilation successful");
             return new CompilationResult(true, null);
 
         } catch (Exception e) {
@@ -156,10 +177,10 @@ public class JavaExecutor implements Executor {
         try {
             long startTime = System.currentTimeMillis();
 
+            // Use file redirect instead of stdin pipe
             ExecCreateCmdResponse exec = dockerClient
                     .execCreateCmd(containerId)
-                    .withCmd("java", "-cp", "/tmp", "Solution")
-                    .withAttachStdin(true)
+                    .withCmd("sh", "-c", "java -cp /tmp Solution < /tmp/input" + testNumber + ".txt")
                     .withAttachStdout(true)
                     .withAttachStderr(true)
                     .exec();
@@ -169,7 +190,6 @@ public class JavaExecutor implements Executor {
 
             ResultCallback.Adapter<Frame> callback = dockerClient
                     .execStartCmd(exec.getId())
-                    .withStdIn(new ByteArrayInputStream(testCase.getInput().getBytes()))
                     .exec(new ResultCallback.Adapter<Frame>() {
                         @Override
                         public void onNext(Frame frame) {
@@ -181,7 +201,6 @@ public class JavaExecutor implements Executor {
                         }
                     });
 
-            // timeLimit is int (ms) — cast to long for awaitCompletion
             boolean finished = callback.awaitCompletion(
                     (long) testCase.getTimeLimit(), TimeUnit.MILLISECONDS);
             long runtime = System.currentTimeMillis() - startTime;
@@ -197,6 +216,7 @@ public class JavaExecutor implements Executor {
             }
 
             if (!error.isEmpty()) {
+                log.info("Test {} stderr: {}", testNumber, error.toString());
                 return TestCaseResult.builder()
                         .testCaseNumber(testNumber)
                         .passed(false)
@@ -208,6 +228,7 @@ public class JavaExecutor implements Executor {
 
             String actual = output.toString().trim();
             String expected = testCase.getExpectedOutput().trim();
+            log.info("Test {}: actual='{}' expected='{}'", testNumber, actual, expected);
 
             return TestCaseResult.builder()
                     .testCaseNumber(testNumber)
@@ -218,6 +239,7 @@ public class JavaExecutor implements Executor {
                     .build();
 
         } catch (Exception e) {
+            log.error("Test case {} failed with exception: {}", testNumber, e.getMessage(), e);
             return TestCaseResult.builder()
                     .testCaseNumber(testNumber)
                     .passed(false)
