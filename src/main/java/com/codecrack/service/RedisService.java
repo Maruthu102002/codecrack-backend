@@ -2,7 +2,6 @@ package com.codecrack.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.stereotype.Service;
@@ -12,12 +11,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Redis Service - Leaderboard, Rate Limiting, JWT Blacklist, Cache
- * Only loads when RedisTemplate is available (excluded in dev profile)
- */
 @Service
-@ConditionalOnBean(RedisTemplate.class)
 @RequiredArgsConstructor
 @Slf4j
 public class RedisService {
@@ -84,7 +78,7 @@ public class RedisService {
             return allowed;
         } catch (Exception e) {
             log.error("Rate limit check failed for key {}: {}", key, e.getMessage());
-            return true; // fail open
+            return true;
         }
     }
 
