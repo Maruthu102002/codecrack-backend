@@ -1,10 +1,22 @@
 version: '3.8'
 
-# Run this with: docker-compose up -d
-# This gives you Redis + RabbitMQ for full-feature dev mode
-# Without this, the app still runs in dev mode using H2 only
-
 services:
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: codecrack
+      POSTGRES_USER: codecrack
+      POSTGRES_PASSWORD: codecrack123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U codecrack" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     ports:
@@ -16,8 +28,8 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # Management UI (guest/guest)
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -25,5 +37,6 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
 volumes:
+  postgres_data:
   redis_data:
   rabbitmq_data:
