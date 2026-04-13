@@ -8,8 +8,6 @@ import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.ExecCreateCmdResponse;
 import com.github.dockerjava.api.model.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -37,15 +35,16 @@ public class PythonExecutor implements Executor {
         String containerId = null;
         try {
             log.info("Starting Python execution for submission {}", request.getSubmissionId());
+            log.info("TestCases in Python executor: {}", request.getTestCases() == null ? "NULL" : request.getTestCases().size());
 
             containerId = createSecureContainer();
-            copyCodeToContainer(containerId, request.getCode());
             dockerClient.startContainerCmd(containerId).exec();
+            copyCodeToContainer(containerId, request.getCode());
 
-            // No compilation needed for Python
             List<TestCaseResult> results = new ArrayList<>();
             for (int i = 0; i < request.getTestCases().size(); i++) {
                 TestCase testCase = request.getTestCases().get(i);
+                log.info("Running Python test case {}", i + 1);
                 TestCaseResult result = runTestCase(containerId, testCase, i + 1);
                 results.add(result);
                 if (!result.isPassed()) break;
@@ -82,13 +81,11 @@ public class PythonExecutor implements Executor {
                         .withCpuQuota(CPU_QUOTA)
                         .withCpuPeriod(CPU_PERIOD)
                         .withNetworkMode("none")
-                        .withReadonlyRootfs(true)
-                        .withTmpFs(Collections.singletonMap("/tmp", "size=50m,mode=1777"))
                         .withPrivileged(false)
                         .withCapDrop(Capability.ALL)
                         .withPidsLimit(50L)
                 )
-                .withUser("nobody:nogroup")
+                .withCmd("sh", "-c", "while true; do sleep 1; done")
                 .withWorkingDir("/tmp")
                 .exec();
         return container.getId();
@@ -100,9 +97,27 @@ public class PythonExecutor implements Executor {
         byte[] codeBytes = code.getBytes();
         TarArchiveEntry entry = new TarArchiveEntry("solution.py");
         entry.setSize(codeBytes.length);
-        entry.setMode(420);
+        entry.setMode(0755);
         tar.putArchiveEntry(entry);
         tar.write(codeBytes);
+        tar.closeArchiveEntry();
+        tar.close();
+
+        dockerClient.copyArchiveToContainerCmd(containerId)
+                .withTarInputStream(new ByteArrayInputStream(tarStream.toByteArray()))
+                .withRemotePath("/tmp")
+                .exec();
+    }
+
+    private void copyInputToContainer(String containerId, String input, int testNumber) throws IOException {
+        ByteArrayOutputStream tarStream = new ByteArrayOutputStream();
+        TarArchiveOutputStream tar = new TarArchiveOutputStream(tarStream);
+        byte[] inputBytes = input.getBytes();
+        TarArchiveEntry entry = new TarArchiveEntry("input" + testNumber + ".txt");
+        entry.setSize(inputBytes.length);
+        entry.setMode(0644);
+        tar.putArchiveEntry(entry);
+        tar.write(inputBytes);
         tar.closeArchiveEntry();
         tar.close();
 
@@ -116,10 +131,12 @@ public class PythonExecutor implements Executor {
         try {
             long startTime = System.currentTimeMillis();
 
+            // Copy input file
+            copyInputToContainer(containerId, testCase.getInput(), testNumber);
+
             ExecCreateCmdResponse exec = dockerClient
                     .execCreateCmd(containerId)
-                    .withCmd("python", "/tmp/solution.py")
-                    .withAttachStdin(true)
+                    .withCmd("sh", "-c", "python /tmp/solution.py < /tmp/input" + testNumber + ".txt")
                     .withAttachStdout(true)
                     .withAttachStderr(true)
                     .exec();
@@ -129,7 +146,6 @@ public class PythonExecutor implements Executor {
 
             ResultCallback.Adapter<Frame> callback = dockerClient
                     .execStartCmd(exec.getId())
-                    .withStdIn(new ByteArrayInputStream(testCase.getInput().getBytes()))
                     .exec(new ResultCallback.Adapter<Frame>() {
                         @Override
                         public void onNext(Frame frame) {
@@ -156,6 +172,7 @@ public class PythonExecutor implements Executor {
             }
 
             if (!error.isEmpty()) {
+                log.warn("Python test {} stderr: {}", testNumber, error);
                 return TestCaseResult.builder()
                         .testCaseNumber(testNumber)
                         .passed(false)
@@ -167,6 +184,7 @@ public class PythonExecutor implements Executor {
 
             String actual = output.toString().trim();
             String expected = testCase.getExpectedOutput().trim();
+            log.info("Python Test {}: actual='{}' expected='{}'", testNumber, actual, expected);
 
             return TestCaseResult.builder()
                     .testCaseNumber(testNumber)
@@ -203,7 +221,7 @@ public class PythonExecutor implements Executor {
         if (containerId != null) {
             try {
                 dockerClient.removeContainerCmd(containerId).withForce(true).exec();
-                log.info("Cleaned up container: {}", containerId);
+                log.info("Cleaned up Python container: {}", containerId);
             } catch (Exception e) {
                 log.error("Failed to cleanup container: {}", containerId, e);
             }

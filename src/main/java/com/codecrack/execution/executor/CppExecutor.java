@@ -27,7 +27,7 @@ public class CppExecutor implements Executor {
 
     private final DockerClient dockerClient;
 
-    private static final String DOCKER_IMAGE = "gcc:11";
+    private static final String DOCKER_IMAGE = "gcc:13";
     private static final long MEMORY_LIMIT = 256L * 1024 * 1024;
     private static final long CPU_QUOTA = 100000L;
     private static final long CPU_PERIOD = 100000L;
@@ -37,24 +37,28 @@ public class CppExecutor implements Executor {
         String containerId = null;
         try {
             log.info("Starting C++ execution for submission {}", request.getSubmissionId());
+            log.info("TestCases in C++ executor: {}", request.getTestCases() == null ? "NULL" : request.getTestCases().size());
 
             containerId = createSecureContainer();
-            copyCodeToContainer(containerId, request.getCode());
             dockerClient.startContainerCmd(containerId).exec();
+            copyCodeToContainer(containerId, request.getCode());
 
             // Compile
             CompilationResult compilation = compile(containerId);
             if (!compilation.isSuccess()) {
+                log.info("C++ Compilation error: {}", compilation.getError());
                 return ExecutionResult.builder()
                         .verdict(Verdict.COMPILATION_ERROR)
                         .compilationError(compilation.getError())
                         .build();
             }
+            log.info("C++ Compilation successful");
 
             // Run test cases
             List<TestCaseResult> results = new ArrayList<>();
             for (int i = 0; i < request.getTestCases().size(); i++) {
                 TestCase testCase = request.getTestCases().get(i);
+                log.info("Running C++ test case {}", i + 1);
                 TestCaseResult result = runTestCase(containerId, testCase, i + 1);
                 results.add(result);
                 if (!result.isPassed()) break;
@@ -91,13 +95,11 @@ public class CppExecutor implements Executor {
                         .withCpuQuota(CPU_QUOTA)
                         .withCpuPeriod(CPU_PERIOD)
                         .withNetworkMode("none")
-                        .withReadonlyRootfs(true)
-                        .withTmpFs(Collections.singletonMap("/tmp", "size=50m,mode=1777"))
                         .withPrivileged(false)
                         .withCapDrop(Capability.ALL)
                         .withPidsLimit(50L)
                 )
-                .withUser("nobody:nogroup")
+                .withCmd("sh", "-c", "while true; do sleep 1; done")
                 .withWorkingDir("/tmp")
                 .exec();
         return container.getId();
@@ -109,9 +111,27 @@ public class CppExecutor implements Executor {
         byte[] codeBytes = code.getBytes();
         TarArchiveEntry entry = new TarArchiveEntry("solution.cpp");
         entry.setSize(codeBytes.length);
-        entry.setMode(420);
+        entry.setMode(0755);
         tar.putArchiveEntry(entry);
         tar.write(codeBytes);
+        tar.closeArchiveEntry();
+        tar.close();
+
+        dockerClient.copyArchiveToContainerCmd(containerId)
+                .withTarInputStream(new ByteArrayInputStream(tarStream.toByteArray()))
+                .withRemotePath("/tmp")
+                .exec();
+    }
+
+    private void copyInputToContainer(String containerId, String input, int testNumber) throws IOException {
+        ByteArrayOutputStream tarStream = new ByteArrayOutputStream();
+        TarArchiveOutputStream tar = new TarArchiveOutputStream(tarStream);
+        byte[] inputBytes = input.getBytes();
+        TarArchiveEntry entry = new TarArchiveEntry("input" + testNumber + ".txt");
+        entry.setSize(inputBytes.length);
+        entry.setMode(0644);
+        tar.putArchiveEntry(entry);
+        tar.write(inputBytes);
         tar.closeArchiveEntry();
         tar.close();
 
@@ -141,9 +161,8 @@ public class CppExecutor implements Executor {
                                 error.append(new String(frame.getPayload()));
                             }
                         }
-                    }).awaitCompletion(15, TimeUnit.SECONDS);
+                    }).awaitCompletion(30, TimeUnit.SECONDS);
 
-            // g++ prints warnings to stderr too — only fail if "error:" present
             if (error.toString().contains("error:")) {
                 return new CompilationResult(false, error.toString());
             }
@@ -158,10 +177,12 @@ public class CppExecutor implements Executor {
         try {
             long startTime = System.currentTimeMillis();
 
+            // Copy input file
+            copyInputToContainer(containerId, testCase.getInput(), testNumber);
+
             ExecCreateCmdResponse exec = dockerClient
                     .execCreateCmd(containerId)
-                    .withCmd("/tmp/solution")
-                    .withAttachStdin(true)
+                    .withCmd("sh", "-c", "/tmp/solution < /tmp/input" + testNumber + ".txt")
                     .withAttachStdout(true)
                     .withAttachStderr(true)
                     .exec();
@@ -171,7 +192,6 @@ public class CppExecutor implements Executor {
 
             ResultCallback.Adapter<Frame> callback = dockerClient
                     .execStartCmd(exec.getId())
-                    .withStdIn(new ByteArrayInputStream(testCase.getInput().getBytes()))
                     .exec(new ResultCallback.Adapter<Frame>() {
                         @Override
                         public void onNext(Frame frame) {
@@ -198,6 +218,7 @@ public class CppExecutor implements Executor {
             }
 
             if (!error.isEmpty()) {
+                log.warn("C++ test {} stderr: {}", testNumber, error);
                 return TestCaseResult.builder()
                         .testCaseNumber(testNumber)
                         .passed(false)
@@ -209,6 +230,7 @@ public class CppExecutor implements Executor {
 
             String actual = output.toString().trim();
             String expected = testCase.getExpectedOutput().trim();
+            log.info("C++ Test {}: actual='{}' expected='{}'", testNumber, actual, expected);
 
             return TestCaseResult.builder()
                     .testCaseNumber(testNumber)
@@ -245,7 +267,7 @@ public class CppExecutor implements Executor {
         if (containerId != null) {
             try {
                 dockerClient.removeContainerCmd(containerId).withForce(true).exec();
-                log.info("Cleaned up container: {}", containerId);
+                log.info("Cleaned up C++ container: {}", containerId);
             } catch (Exception e) {
                 log.error("Failed to cleanup container: {}", containerId, e);
             }

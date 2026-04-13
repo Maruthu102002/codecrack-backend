@@ -8,6 +8,7 @@ import com.codecrack.model.TestCase;
 import com.codecrack.model.Verdict;
 import com.codecrack.repository.SubmissionRepository;
 import com.codecrack.repository.TestCaseRepository;
+import com.codecrack.service.SubmissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -24,6 +25,7 @@ public class SubmissionWorker {
     private final DockerExecutionService executionService;
     private final SubmissionRepository submissionRepository;
     private final TestCaseRepository testCaseRepository;
+    private final SubmissionService submissionService;
 
     @RabbitListener(queues = "${app.queue.submissions}")
     public void processSubmission(Long submissionId) {
@@ -43,8 +45,7 @@ public class SubmissionWorker {
 
             if (testCases.isEmpty()) {
                 log.warn("No test cases found for problem {}", submission.getProblemId());
-                submission.setVerdict(Verdict.ACCEPTED);
-                submissionRepository.save(submission);
+                submissionService.updateVerdict(submissionId, Verdict.ACCEPTED, 0, 0, null);
                 return;
             }
 
@@ -61,24 +62,20 @@ public class SubmissionWorker {
 
             ExecutionResult result = executionService.execute(request);
 
-            submission.setVerdict(result.getVerdict());
-            submission.setRuntimeMs(result.getRuntimeMs());
-            submission.setMemoryKb(result.getMemoryKb());
-            submission.setErrorMessage(result.getErrorMessage() != null
-                    ? result.getErrorMessage()
-                    : result.getCompilationError());
-            submission.setCompletedAt(LocalDateTime.now());
-            submissionRepository.save(submission);
+            // Use updateVerdict — this updates leaderboard + user stats
+            submissionService.updateVerdict(
+                    submissionId,
+                    result.getVerdict(),
+                    result.getRuntimeMs(),
+                    result.getMemoryKb(),
+                    result.getErrorMessage() != null ? result.getErrorMessage() : result.getCompilationError()
+            );
 
-            log.info("Completed submission {} with verdict: {}",
-                    submissionId, result.getVerdict());
+            log.info("Completed submission {} with verdict: {}", submissionId, result.getVerdict());
 
         } catch (Exception e) {
             log.error("Failed to process submission: {}", submissionId, e);
-            submission.setVerdict(Verdict.RUNTIME_ERROR);
-            submission.setErrorMessage(e.getMessage());
-            submission.setCompletedAt(LocalDateTime.now());
-            submissionRepository.save(submission);
+            submissionService.updateVerdict(submissionId, Verdict.RUNTIME_ERROR, 0, 0, e.getMessage());
             throw new RuntimeException(e);
         }
     }
