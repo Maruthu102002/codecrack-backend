@@ -2,6 +2,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
+    restart: always
     ports:
       - "5432:5432"
     environment:
@@ -17,6 +18,7 @@ services:
       retries: 5
   redis:
     image: redis:7-alpine
+    restart: always
     ports:
       - "6379:6379"
     volumes:
@@ -24,6 +26,7 @@ services:
     command: redis-server --appendonly yes
   rabbitmq:
     image: rabbitmq:3-management-alpine
+    restart: always
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -43,6 +46,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: codecrack123
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
+      APP_APP_JWT_SECRET: CodeCrackSuperSecretJWTKeyMinimum256BitsLongEnoughForProduction123456
     depends_on:
       postgres:
         condition: service_healthy
