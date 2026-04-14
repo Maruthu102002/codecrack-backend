@@ -8,6 +8,18 @@
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-Message%20Queue-orange)](https://www.rabbitmq.com/)
 [![Redis](https://img.shields.io/badge/Redis-Cache%20%26%20Leaderboard-red)](https://redis.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Production%20DB-blue)](https://www.postgresql.org/)
+[![GCP](https://img.shields.io/badge/GCP-Live%20Deployed-4285F4)](http://34.14.128.25:8080/actuator/health)
+
+---
+
+## 🌐 Live Deployment
+
+| | |
+|---|---|
+| **GCP Live URL** | http://34.14.128.25:8080 |
+| **Health Check** | http://34.14.128.25:8080/actuator/health |
+| **Region** | asia-south1-c (Mumbai) |
+| **Status** | ✅ LIVE |
 
 ---
 
@@ -59,9 +71,10 @@ Verdict → PostgreSQL DB + Redis Leaderboard
 | **Cache & Leaderboard** | Redis (Lettuce client) |
 | **Code Execution** | Docker (Java, Python, C++ containers) |
 | **Database** | PostgreSQL (prod), H2 file-based (dev) |
-| **Monitoring** | Prometheus + Grafana + ELK Stack |
+| **Monitoring** | Prometheus + Actuator health checks |
 | **Build Tool** | Maven |
 | **Containerization** | Docker Compose |
+| **Cloud** | Google Cloud Platform (GCP VM) |
 
 ---
 
@@ -92,9 +105,8 @@ Verdict → PostgreSQL DB + Redis Leaderboard
 
 ### Monitoring
 - Prometheus metrics endpoint
-- Grafana dashboard integration
-- ELK Stack for centralized logging
 - Spring Boot Actuator health checks
+- Centralized logging support
 
 ---
 
@@ -123,9 +135,8 @@ GET  /api/submissions/my/{userId}    - Get user submissions
 
 ### Health & Monitoring
 ```
-GET /actuator/health     - Health check
+GET /actuator/health     - Health check (public)
 GET /actuator/metrics    - Prometheus metrics
-GET /h2-console          - H2 DB console (dev only)
 ```
 
 ---
@@ -171,21 +182,24 @@ docker-compose up -d
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-### Test API
+### Test Live API
 
 ```bash
+# Health check
+curl http://34.14.128.25:8080/actuator/health
+
 # Register
-curl -X POST http://localhost:8080/api/auth/register \
+curl -X POST http://34.14.128.25:8080/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"test","email":"test@test.com","password":"Test@123"}'
 
 # Login
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://34.14.128.25:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"Test@123"}'
 
 # Submit code
-curl -X POST http://localhost:8080/api/submissions \
+curl -X POST http://34.14.128.25:8080/api/submissions \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"userId":1,"problemId":1,"language":"JAVA","code":"class Solution{...}"}'
@@ -200,7 +214,6 @@ users          - User accounts & stats
 problems       - Problem statements & metadata
 test_cases     - Input/output test cases per problem
 submissions    - Code submissions & verdicts
-user_roles     - Role-based access control
 ```
 
 ---
@@ -213,17 +226,14 @@ Services:
   - Redis              → Port 6379
   - RabbitMQ           → Port 5672 (UI: 15672)
   - PostgreSQL         → Port 5432
-  - Prometheus         → Port 9090
-  - Grafana            → Port 3000
 ```
 
 ---
 
 ## 👨‍💻 Author
 
-**Maruthu** — CS Student 
-📍 Tamil Nadu, India  
+**Maruthu** — CS Graduate Student
+📍 Tamil Nadu, India
 🔗 [GitHub](https://github.com/Maruthu102002)
 
 ---
-
