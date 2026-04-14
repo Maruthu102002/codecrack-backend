@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -16,7 +15,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
   redis:
     image: redis:7-alpine
     ports:
@@ -24,7 +22,6 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
-
   rabbitmq:
     image: rabbitmq:3-management-alpine
     ports:
@@ -35,7 +32,25 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
-
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/codecrack
+      SPRING_DATASOURCE_USERNAME: codecrack
+      SPRING_DATASOURCE_PASSWORD: codecrack123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    restart: on-failure
 volumes:
   postgres_data:
   redis_data:

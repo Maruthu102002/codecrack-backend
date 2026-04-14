@@ -1,9 +1,8 @@
 spring:
   datasource:
-    jdbc-url: jdbc:postgresql://localhost:5433/codecrack
-    driver-class-name: org.postgresql.Driver
-    username: codecrack
-    password: codecrack123
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/codecrack}
+    username: ${SPRING_DATASOURCE_USERNAME:codecrack}
+    password: ${SPRING_DATASOURCE_PASSWORD:codecrack123}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5
@@ -16,15 +15,14 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   data:
     redis:
-      host: localhost
+      host: redis
       port: 6379
       password:
   rabbitmq:
-    host: localhost
+    host: rabbitmq
     port: 5672
     username: guest
     password: guest
-
 logging:
   level:
     com.codecrack: INFO
