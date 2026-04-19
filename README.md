@@ -1,4 +1,4 @@
- # 🚀 CodeCrack - Distributed Online Judge Platform
+  # 🚀 CodeCrack - Distributed Online Judge Platform
 
 > A production-grade, FAANG-level distributed online judge backend built with Spring Boot, Docker, Redis, and RabbitMQ.
 
@@ -233,7 +233,6 @@ Services:
 ## 👨‍💻 Author
 
 **Maruthu** — CS Graduate Student
-📍 Tamil Nadu, India
 🔗 [GitHub](https://github.com/Maruthu102002)
 
 ---
