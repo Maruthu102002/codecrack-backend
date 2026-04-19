@@ -1,5 +1,6 @@
 package com.codecrack.controller;
 
+import com.codecrack.exception.ResourceNotFoundException;
 import com.codecrack.model.Problem;
 import com.codecrack.model.TestCase;
 import com.codecrack.repository.ProblemRepository;
@@ -7,6 +8,7 @@ import com.codecrack.repository.TestCaseRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,23 +23,22 @@ public class ProblemController {
     private final ProblemRepository problemRepository;
     private final TestCaseRepository testCaseRepository;
 
-    // GET all problems
     @GetMapping
     public ResponseEntity<?> getAllProblems() {
         List<Problem> problems = problemRepository.findByIsActiveTrue();
         return ResponseEntity.ok(problems);
     }
 
-    // GET single problem
     @GetMapping("/{id}")
     public ResponseEntity<?> getProblem(@PathVariable Long id) {
         Problem problem = problemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Problem not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Problem not found with id: " + id));
         return ResponseEntity.ok(problem);
     }
 
-    // POST create problem (admin)
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createProblem(@RequestBody Map<String, Object> request) {
         Problem problem = Problem.builder()
                 .title((String) request.get("title"))
@@ -58,14 +59,15 @@ public class ProblemController {
         ));
     }
 
-    // POST add test cases to problem
     @PostMapping("/{id}/testcases")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> addTestCases(
             @PathVariable Long id,
             @RequestBody List<Map<String, Object>> testCases) {
 
         problemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Problem not found"));
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Problem not found with id: " + id));
 
         for (int i = 0; i < testCases.size(); i++) {
             Map<String, Object> tc = testCases.get(i);
@@ -90,7 +92,6 @@ public class ProblemController {
         ));
     }
 
-    // GET test cases for problem
     @GetMapping("/{id}/testcases")
     public ResponseEntity<?> getTestCases(@PathVariable Long id) {
         List<TestCase> testCases =

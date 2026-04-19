@@ -8,12 +8,14 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -44,24 +46,25 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (username != null &&
                     SecurityContextHolder.getContext().getAuthentication() == null) {
 
-                UserDetails userDetails = userRepository.findByUsername(username)
-                        .map(user -> org.springframework.security.core.userdetails.User
-                                .withUsername(user.getUsername())
-                                .password(user.getPassword())
-                                .roles(user.getRoles().stream()
-                                        .map(r -> r.replace("ROLE_", ""))
-                                        .toArray(String[]::new))
-                                .build())
-                        .orElse(null);
+                userRepository.findByUsername(username).ifPresent(user -> {
+                    List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
+                            .map(SimpleGrantedAuthority::new)
+                            .collect(Collectors.toList());
 
-                if (userDetails != null &&
-                        jwtUtil.validateAccessToken(token, userDetails)) {
-                    UsernamePasswordAuthenticationToken authToken =
-                            new UsernamePasswordAuthenticationToken(
-                                    userDetails, null,
-                                    userDetails.getAuthorities());
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
+                    UserPrincipal principal = new UserPrincipal(
+                            user.getId(),
+                            user.getUsername(),
+                            user.getPassword(),
+                            authorities
+                    );
+
+                    if (jwtUtil.validateAccessToken(token, principal)) {
+                        UsernamePasswordAuthenticationToken authToken =
+                                new UsernamePasswordAuthenticationToken(
+                                        principal, null, authorities);
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                    }
+                });
             }
         } catch (Exception e) {
             log.error("JWT filter error: {}", e.getMessage());
