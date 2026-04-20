@@ -252,14 +252,18 @@ public class JavaExecutor implements Executor {
 
     private Verdict determineVerdict(List<TestCaseResult> results, int totalTestCases) {
         if (results.isEmpty()) return Verdict.RUNTIME_ERROR;
-        TestCaseResult last = results.get(results.size() - 1);
-        if (results.size() < totalTestCases) {
-            if (last.getActualOutput().contains("Time Limit")) return Verdict.TIME_LIMIT_EXCEEDED;
-            if (last.getActualOutput().contains("Runtime Error")) return Verdict.RUNTIME_ERROR;
-            return Verdict.WRONG_ANSWER;
+
+        for (TestCaseResult result : results) {
+            if (!result.isPassed()) {
+                String output = result.getActualOutput();
+                if (output != null && output.startsWith("Time Limit"))
+                    return Verdict.TIME_LIMIT_EXCEEDED;
+                if (output != null && output.startsWith("Runtime Error"))
+                    return Verdict.RUNTIME_ERROR;
+                return Verdict.WRONG_ANSWER;
+            }
         }
-        return results.stream().allMatch(TestCaseResult::isPassed)
-                ? Verdict.ACCEPTED : Verdict.WRONG_ANSWER;
+        return Verdict.ACCEPTED;
     }
 
     private void cleanupContainer(String containerId) {

@@ -12,4 +12,6 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     List<Submission> findByProblemIdOrderBySubmittedAtDesc(Long problemId);
     List<Submission> findByUserIdAndProblemId(Long userId, Long problemId);
     Long countByUserIdAndVerdict(Long userId, Verdict verdict);
+
+    boolean existsByUserIdAndProblemIdAndVerdict(Long userId, Long problemId, Verdict verdict);
 }
