@@ -3,9 +3,9 @@ package com.codecrack.controller;
 import com.codecrack.dto.LoginRequest;
 import com.codecrack.dto.RegisterRequest;
 import com.codecrack.model.User;
-import com.codecrack.repository.UserRepository;
 import com.codecrack.security.EnhancedJwtUtil;
 import com.codecrack.security.UserPrincipal;
+import com.codecrack.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,7 +16,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.Set;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -24,48 +23,33 @@ import java.util.Set;
 @Slf4j
 public class AuthController {
 
-    private final UserRepository userRepository;
+    private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final EnhancedJwtUtil jwtUtil;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
-
-        if (userRepository.existsByUsername(request.getUsername())) {
+        try {
+            User user = userService.register(
+                    request.getUsername(),
+                    request.getEmail(),
+                    request.getPassword()
+            );
+            return ResponseEntity.ok(Map.of(
+                    "message", "User registered successfully",
+                    "username", user.getUsername()
+            ));
+        } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Username already taken"));
+                    .body(Map.of("error", ex.getMessage()));
         }
-        if (userRepository.existsByEmail(request.getEmail())) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Email already registered"));
-        }
-
-        User user = User.builder()
-                .username(request.getUsername())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .roles(Set.of("ROLE_USER"))
-                .problemsSolved(0)
-                .totalSubmissions(0)
-                .acceptedSubmissions(0)
-                .isActive(true)
-                .build();
-
-        userRepository.save(user);
-        log.info("Registered new user: {}", request.getUsername());
-
-        return ResponseEntity.ok(Map.of(
-                "message", "User registered successfully",
-                "username", request.getUsername()
-        ));
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        User user = userService.findByUsername(request.getUsername());
 
-        User user = userRepository.findByUsername(request.getUsername()).orElse(null);
-
-        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Invalid username or password"));
         }
@@ -94,9 +78,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal UserPrincipal principal) {
-
-        User user = userRepository.findByUsername(principal.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        User user = userService.findByUsername(principal.getUsername());
 
         return ResponseEntity.ok(Map.of(
                 "id", user.getId(),

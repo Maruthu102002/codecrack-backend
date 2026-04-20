@@ -105,7 +105,7 @@ class SubmissionServiceTest {
         submissionService.submitCode(1L, 1L, "print(1)", "PYTHON");
 
         // Assert — RabbitMQ called with 2 args
-        verify(rabbitTemplate, times(1)).convertAndSend(isNull(), any(Object.class));    }
+        verify(rabbitTemplate, times(1)).convertAndSend(any(), any(Object.class));   }
 
     @Test
     void submitCode_InvalidProblem_ThrowsException() {

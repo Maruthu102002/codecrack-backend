@@ -49,14 +49,7 @@ public class SubmissionService {
             return submissionRepository.save(submission);
         }
 
-        ExecutionRequest request = ExecutionRequest.builder()
-                .submissionId(submission.getId())
-                .code(code)
-                .language(language.toUpperCase())
-                .testCases(testCases)
-                .userId(userId)
-                .problemId(problemId)
-                .build();
+
 
         rabbitTemplate.convertAndSend(submissionsQueue, submission.getId());
         log.info("Queued submission {} for execution", submission.getId());

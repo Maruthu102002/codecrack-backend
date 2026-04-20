@@ -1,4 +1,4 @@
-  # 🚀 CodeCrack - Distributed Online Judge Platform
+# 🚀 CodeCrack - Distributed Online Judge Platform
 
 > A production-grade, FAANG-level distributed online judge backend built with Spring Boot, Docker, Redis, and RabbitMQ.
 
@@ -8,7 +8,7 @@
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-Message%20Queue-orange)](https://www.rabbitmq.com/)
 [![Redis](https://img.shields.io/badge/Redis-Cache%20%26%20Leaderboard-red)](https://redis.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Production%20DB-blue)](https://www.postgresql.org/)
-[![GCP](https://img.shields.io/badge/GCP-Live%20Deployed-4285F4)](http://34.14.128.25:8080/actuator/health)
+[![GCP](https://img.shields.io/badge/GCP-Live%20Deployed-4285F4)](http://34.14.209.152:8080/actuator/health)
 
 ---
 
@@ -16,8 +16,8 @@
 
 | | |
 |---|---|
-| **GCP Live URL** | http://34.14.128.25:8080 |
-| **Health Check** | http://34.14.128.25:8080/actuator/health |
+| **GCP Live URL** | http://34.14.209.152:8080 |
+| **Health Check** | http://34.14.209.152:8080/actuator/health |
 | **Region** | asia-south1-c (Mumbai) |
 | **Status** | ✅ LIVE |
 
@@ -38,8 +38,9 @@ Client Request
 Spring Boot API (Port 8080)
       │
       ├── JWT Authentication (HS512)
-      │
-      ├── Rate Limiting (Redis)
+      ├── Role-Based Access Control (RBAC)
+      ├── Input Validation (DTOs + @Valid)
+      ├── Rate Limiting (Redis - 5 req/min)
       │
       ▼
 RabbitMQ Queue (code.submissions.queue)
@@ -66,12 +67,14 @@ Verdict → PostgreSQL DB + Redis Leaderboard
 | Layer | Technology |
 |-------|-----------|
 | **Backend Framework** | Spring Boot 3.2.1, Java 21 |
-| **Security** | Spring Security 6.2, JWT (jjwt 0.12.3, HS512) |
+| **Security** | Spring Security 6.2, JWT (jjwt 0.12.3, HS512), RBAC |
 | **Message Queue** | RabbitMQ with DLQ & retry logic |
-| **Cache & Leaderboard** | Redis (Lettuce client) |
+| **Cache & Rate Limiting** | Redis (Lettuce client) |
 | **Code Execution** | Docker (Java, Python, C++ containers) |
 | **Database** | PostgreSQL (prod), H2 file-based (dev) |
 | **Monitoring** | Prometheus + Actuator health checks |
+| **Validation** | Jakarta Validation, DTOs, GlobalExceptionHandler |
+| **Testing** | JUnit 5, Mockito (5 unit tests) |
 | **Build Tool** | Maven |
 | **Containerization** | Docker Compose |
 | **Cloud** | Google Cloud Platform (GCP VM) |
@@ -93,9 +96,24 @@ Verdict → PostgreSQL DB + Redis Leaderboard
 
 ### Security & Auth
 - Stateless JWT authentication (HS512, 24h expiry)
-- JWT blacklist via Redis
+- Role-Based Access Control (RBAC) with `@PreAuthorize`
+- `@AuthenticationPrincipal` userId injection from JWT
 - BCrypt password hashing
 - Spring Security filter chain
+
+### Input Validation
+- DTO-based request validation (`RegisterRequest`, `LoginRequest`, `SubmissionRequest`)
+- `@Valid` annotations with field-level error messages
+- `GlobalExceptionHandler` for centralized error responses
+
+### Rate Limiting
+- Redis-based rate limiter per user
+- Max 5 submissions per minute
+- Returns `429 Too Many Requests` on limit exceeded
+
+### Pagination
+- `GET /api/problems` supports `?page=0&size=10&sortBy=id`
+- Returns totalPages, totalElements, currentPage
 
 ### Leaderboard & Analytics
 - Real-time Redis-based leaderboard
@@ -114,23 +132,25 @@ Verdict → PostgreSQL DB + Redis Leaderboard
 
 ### Authentication
 ```
-POST /api/auth/register    - Register new user
+POST /api/auth/register    - Register new user (validated)
 POST /api/auth/login       - Login & get JWT token
-GET  /api/auth/me          - Get current user info
+GET  /api/auth/me          - Get current user info (JWT)
 ```
 
 ### Problems
 ```
-POST /api/problems                    - Create problem (admin)
+POST /api/problems                    - Create problem (ADMIN only)
+GET  /api/problems?page=0&size=10    - Get paginated problems
 GET  /api/problems/{id}              - Get problem by ID
-POST /api/problems/{id}/testcases    - Add test cases
+POST /api/problems/{id}/testcases    - Add test cases (ADMIN only)
+GET  /api/problems/{id}/testcases    - Get test cases
 ```
 
 ### Submissions
 ```
-POST /api/submissions                - Submit code
-GET  /api/submissions/{id}           - Get submission verdict
-GET  /api/submissions/my/{userId}    - Get user submissions
+POST /api/submissions       - Submit code (rate limited: 5/min)
+GET  /api/submissions/{id}  - Get submission verdict
+GET  /api/submissions/my    - Get my submissions (JWT)
 ```
 
 ### Health & Monitoring
@@ -186,23 +206,27 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
 ```bash
 # Health check
-curl http://34.14.128.25:8080/actuator/health
+curl http://34.14.209.152:8080/actuator/health
 
-# Register
-curl -X POST http://34.14.128.25:8080/api/auth/register \
+# Register (validated)
+curl -X POST http://34.14.209.152:8080/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"test","email":"test@test.com","password":"Test@123"}'
 
 # Login
-curl -X POST http://34.14.128.25:8080/api/auth/login \
+curl -X POST http://34.14.209.152:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"Test@123"}'
 
-# Submit code
-curl -X POST http://34.14.128.25:8080/api/submissions \
+# Get paginated problems
+curl "http://34.14.209.152:8080/api/problems?page=0&size=10" \
+  -H "Authorization: Bearer <token>"
+
+# Submit code (rate limited)
+curl -X POST http://34.14.209.152:8080/api/submissions \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{"userId":1,"problemId":1,"language":"JAVA","code":"class Solution{...}"}'
+  -d '{"problemId":1,"language":"PYTHON","code":"print(1)"}'
 ```
 
 ---
@@ -226,6 +250,20 @@ Services:
   - Redis              → Port 6379
   - RabbitMQ           → Port 5672 (UI: 15672)
   - PostgreSQL         → Port 5432
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+# Run unit tests
+mvn test
+
+# Tests cover:
+# - SubmissionService: valid/invalid submissions
+# - RabbitMQ queue verification  
+# - Exception handling
 ```
 
 ---
