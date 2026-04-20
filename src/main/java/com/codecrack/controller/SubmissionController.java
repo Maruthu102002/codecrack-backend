@@ -3,6 +3,7 @@ package com.codecrack.controller;
 import com.codecrack.dto.SubmissionRequest;
 import com.codecrack.model.Submission;
 import com.codecrack.security.UserPrincipal;
+import com.codecrack.service.RateLimitService;
 import com.codecrack.service.SubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,11 +22,20 @@ import java.util.Map;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
+    private final RateLimitService rateLimitService;
 
     @PostMapping
     public ResponseEntity<?> submit(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody SubmissionRequest request) {
+
+        if (!rateLimitService.isSubmissionAllowed(principal.getId())) {
+            return ResponseEntity.status(429).body(Map.of(
+                    "error", "Too Many Requests",
+                    "message", "Submission limit exceeded. Max 5 per minute.",
+                    "status", 429
+            ));
+        }
 
         Submission submission = submissionService.submitCode(
                 principal.getId(),
