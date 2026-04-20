@@ -8,7 +8,7 @@
 [![RabbitMQ](https://img.shields.io/badge/RabbitMQ-Message%20Queue-orange)](https://www.rabbitmq.com/)
 [![Redis](https://img.shields.io/badge/Redis-Cache%20%26%20Leaderboard-red)](https://redis.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Production%20DB-blue)](https://www.postgresql.org/)
-[![GCP](https://img.shields.io/badge/GCP-Live%20Deployed-4285F4)](http://34.14.209.152:8080/actuator/health)
+[![GCP](https://img.shields.io/badge/GCP-Live%20Deployed-4285F4)](http://34.100.210.47:8080/actuator/health)
 
 ---
 
@@ -16,8 +16,9 @@
 
 | | |
 |---|---|
-| **GCP Live URL** | http://34.14.209.152:8080 |
-| **Health Check** | http://34.14.209.152:8080/actuator/health |
+| **GCP Live URL** | http://34.100.210.47:8080 |
+| **Health Check** | http://34.100.210.47:8080/actuator/health |
+| **Swagger UI** | http://34.100.210.47:8080/swagger-ui/index.html |
 | **Region** | asia-south1-c (Mumbai) |
 | **Status** | ✅ LIVE |
 
@@ -71,10 +72,11 @@ Verdict → PostgreSQL DB + Redis Leaderboard
 | **Message Queue** | RabbitMQ with DLQ & retry logic |
 | **Cache & Rate Limiting** | Redis (Lettuce client) |
 | **Code Execution** | Docker (Java, Python, C++ containers) |
-| **Database** | PostgreSQL (prod), H2 file-based (dev) |
+| **Database** | PostgreSQL (prod), H2 in-memory (test) |
+| **API Documentation** | Swagger / OpenAPI 3.0 (springdoc) |
 | **Monitoring** | Prometheus + Actuator health checks |
 | **Validation** | Jakarta Validation, DTOs, GlobalExceptionHandler |
-| **Testing** | JUnit 5, Mockito (5 unit tests) |
+| **Testing** | JUnit 5, Mockito, Spring Boot Test, JaCoCo |
 | **Build Tool** | Maven |
 | **Containerization** | Docker Compose |
 | **Cloud** | Google Cloud Platform (GCP VM) |
@@ -155,8 +157,10 @@ GET  /api/submissions/my    - Get my submissions (JWT)
 
 ### Health & Monitoring
 ```
-GET /actuator/health     - Health check (public)
-GET /actuator/metrics    - Prometheus metrics
+GET /actuator/health               - Health check (public)
+GET /actuator/metrics              - Prometheus metrics
+GET /swagger-ui/index.html        - Interactive API docs
+GET /v3/api-docs                   - OpenAPI JSON spec
 ```
 
 ---
@@ -206,24 +210,24 @@ mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
 ```bash
 # Health check
-curl http://34.14.209.152:8080/actuator/health
+curl http://34.100.210.47:8080/actuator/health
 
 # Register (validated)
-curl -X POST http://34.14.209.152:8080/api/auth/register \
+curl -X POST http://34.100.210.47:8080/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"test","email":"test@test.com","password":"Test@123"}'
 
 # Login
-curl -X POST http://34.14.209.152:8080/api/auth/login \
+curl -X POST http://34.100.210.47:8080/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"Test@123"}'
 
 # Get paginated problems
-curl "http://34.14.209.152:8080/api/problems?page=0&size=10" \
+curl "http://34.100.210.47:8080/api/problems?page=0&size=10" \
   -H "Authorization: Bearer <token>"
 
 # Submit code (rate limited)
-curl -X POST http://34.14.209.152:8080/api/submissions \
+curl -X POST http://34.100.210.47:8080/api/submissions \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"problemId":1,"language":"PYTHON","code":"print(1)"}'
@@ -257,13 +261,25 @@ Services:
 ## 🧪 Testing
 
 ```bash
-# Run unit tests
+# Run all tests with coverage
 mvn test
+```
 
-# Tests cover:
-# - SubmissionService: valid/invalid submissions
-# - RabbitMQ queue verification  
-# - Exception handling
+### Test Coverage
+- **10 tests passing** (5 unit + 5 integration)
+- **JaCoCo coverage reporting** configured across 54 classes
+- **H2 in-memory DB** for integration tests (no external DB needed)
+- **MockBeans** for Redis/RabbitMQ isolation in tests
+- Integration tests cover: register, login, duplicate user, invalid email, invalid password flows
+
+### Test Structure
+```
+src/test/java/com/codecrack/
+├── BaseIntegrationTest.java                     - H2 + MockBean setup
+├── controller/
+│   └── AuthControllerIntegrationTest.java       - 5 integration tests
+└── service/
+    └── SubmissionServiceTest.java               - 5 unit tests
 ```
 
 ---
