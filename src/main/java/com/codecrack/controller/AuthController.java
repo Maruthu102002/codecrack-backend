@@ -1,11 +1,16 @@
 package com.codecrack.controller;
 
+import com.codecrack.dto.LoginRequest;
+import com.codecrack.dto.RegisterRequest;
 import com.codecrack.model.User;
 import com.codecrack.repository.UserRepository;
 import com.codecrack.security.EnhancedJwtUtil;
+import com.codecrack.security.UserPrincipal;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -24,24 +29,21 @@ public class AuthController {
     private final EnhancedJwtUtil jwtUtil;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
-        String username = request.get("username");
-        String email = request.get("email");
-        String password = request.get("password");
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
 
-        if (userRepository.existsByUsername(username)) {
+        if (userRepository.existsByUsername(request.getUsername())) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Username already taken"));
         }
-        if (userRepository.existsByEmail(email)) {
+        if (userRepository.existsByEmail(request.getEmail())) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Email already registered"));
         }
 
         User user = User.builder()
-                .username(username)
-                .email(email)
-                .password(passwordEncoder.encode(password))
+                .username(request.getUsername())
+                .email(request.getEmail())
+                .password(passwordEncoder.encode(request.getPassword()))
                 .roles(Set.of("ROLE_USER"))
                 .problemsSolved(0)
                 .totalSubmissions(0)
@@ -50,22 +52,20 @@ public class AuthController {
                 .build();
 
         userRepository.save(user);
-        log.info("Registered new user: {}", username);
+        log.info("Registered new user: {}", request.getUsername());
 
         return ResponseEntity.ok(Map.of(
                 "message", "User registered successfully",
-                "username", username
+                "username", request.getUsername()
         ));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
-        String username = request.get("username");
-        String password = request.get("password");
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
 
-        User user = userRepository.findByUsername(username).orElse(null);
+        User user = userRepository.findByUsername(request.getUsername()).orElse(null);
 
-        if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Invalid username or password"));
         }
@@ -87,17 +87,15 @@ public class AuthController {
 
         return ResponseEntity.ok(Map.of(
                 "token", token,
-                "username", username,
+                "username", user.getUsername(),
                 "userId", user.getId()
         ));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser(@RequestHeader("Authorization") String authHeader) {
-        String token = authHeader.replace("Bearer ", "");
-        String username = jwtUtil.extractUsername(token);
+    public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal UserPrincipal principal) {
 
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByUsername(principal.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         return ResponseEntity.ok(Map.of(

@@ -1,8 +1,10 @@
 package com.codecrack.controller;
 
+import com.codecrack.dto.SubmissionRequest;
 import com.codecrack.model.Submission;
 import com.codecrack.security.UserPrincipal;
 import com.codecrack.service.SubmissionService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -23,15 +25,13 @@ public class SubmissionController {
     @PostMapping
     public ResponseEntity<?> submit(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestBody Map<String, Object> request) {
-
-        Long userId = principal.getId(); // JWT la irundhu auto inject!
-        Long problemId = Long.valueOf(request.get("problemId").toString());
-        String code = (String) request.get("code");
-        String language = (String) request.get("language");
+            @Valid @RequestBody SubmissionRequest request) {
 
         Submission submission = submissionService.submitCode(
-                userId, problemId, code, language);
+                principal.getId(),
+                request.getProblemId(),
+                request.getCode(),
+                request.getLanguage());
 
         return ResponseEntity.ok(Map.of(
                 "submissionId", submission.getId(),

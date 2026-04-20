@@ -5,8 +5,13 @@ import com.codecrack.model.Problem;
 import com.codecrack.model.TestCase;
 import com.codecrack.repository.ProblemRepository;
 import com.codecrack.repository.TestCaseRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -24,9 +29,21 @@ public class ProblemController {
     private final TestCaseRepository testCaseRepository;
 
     @GetMapping
-    public ResponseEntity<?> getAllProblems() {
-        List<Problem> problems = problemRepository.findByIsActiveTrue();
-        return ResponseEntity.ok(problems);
+    public ResponseEntity<?> getAllProblems(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "id") String sortBy) {
+
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy).ascending());
+        Page<Problem> problems = problemRepository.findByIsActiveTrue(pageable);
+
+        return ResponseEntity.ok(Map.of(
+                "problems", problems.getContent(),
+                "totalElements", problems.getTotalElements(),
+                "totalPages", problems.getTotalPages(),
+                "currentPage", problems.getNumber(),
+                "pageSize", problems.getSize()
+        ));
     }
 
     @GetMapping("/{id}")
