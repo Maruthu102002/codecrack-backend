@@ -9,6 +9,7 @@ import com.codecrack.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -26,6 +28,7 @@ public class AuthController {
     private final UserService userService;
     private final PasswordEncoder passwordEncoder;
     private final EnhancedJwtUtil jwtUtil;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
@@ -67,13 +70,57 @@ public class AuthController {
                         .toArray(String[]::new))
                 .build();
 
-        String token = jwtUtil.generateAccessToken(userDetails);
+        String accessToken = jwtUtil.generateAccessToken(userDetails);
+        String refreshToken = jwtUtil.generateRefreshToken(userDetails);
+
+        // Store refresh token in Redis (7 days)
+        redisTemplate.opsForValue().set(
+                "refresh:" + user.getId(),
+                refreshToken,
+                7, TimeUnit.DAYS
+        );
 
         return ResponseEntity.ok(Map.of(
-                "token", token,
+                "accessToken", accessToken,
+                "refreshToken", refreshToken,
                 "username", user.getUsername(),
                 "userId", user.getId()
         ));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refresh(@RequestBody Map<String, String> body) {
+        String refreshToken = body.get("refreshToken");
+
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Refresh token required"));
+        }
+
+        try {
+            String username = jwtUtil.extractUsername(refreshToken);
+            User user = userService.findByUsername(username);
+
+            // Verify stored refresh token
+            String stored = redisTemplate.opsForValue().get("refresh:" + user.getId());
+            if (!refreshToken.equals(stored)) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid refresh token"));
+            }
+
+            UserDetails userDetails = org.springframework.security.core.userdetails.User
+                    .withUsername(user.getUsername())
+                    .password(user.getPassword())
+                    .roles(user.getRoles().stream()
+                            .map(r -> r.replace("ROLE_", ""))
+                            .toArray(String[]::new))
+                    .build();
+
+            String newAccessToken = jwtUtil.generateAccessToken(userDetails);
+
+            return ResponseEntity.ok(Map.of("accessToken", newAccessToken));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("error", "Invalid or expired refresh token"));
+        }
     }
 
     @GetMapping("/me")
