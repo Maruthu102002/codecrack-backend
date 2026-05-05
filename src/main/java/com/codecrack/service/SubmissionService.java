@@ -9,6 +9,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -124,7 +126,7 @@ public class SubmissionService {
                 .orElseThrow(() -> new RuntimeException("Submission not found: " + id));
     }
 
-    public List<Submission> getUserSubmissions(Long userId) {
-        return submissionRepository.findByUserIdOrderBySubmittedAtDesc(userId);
+    public Page<Submission> getUserSubmissions(Long userId, Pageable pageable) {
+        return submissionRepository.findByUserId(userId, pageable);
     }
 }

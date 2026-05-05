@@ -8,11 +8,14 @@ import com.codecrack.service.SubmissionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -70,9 +73,20 @@ public class SubmissionController {
 
     @GetMapping("/my")
     public ResponseEntity<?> getMySubmissions(
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
 
-        List<Submission> submissions = submissionService.getUserSubmissions(principal.getId());
-        return ResponseEntity.ok(submissions);
+        Pageable pageable = PageRequest.of(page, size, Sort.by("submittedAt").descending());
+        Page<Submission> submissions = submissionService.getUserSubmissions(principal.getId(), pageable);
+
+        return ResponseEntity.ok(Map.of(
+                "content", submissions.getContent(),
+                "page", submissions.getNumber(),
+                "size", submissions.getSize(),
+                "totalElements", submissions.getTotalElements(),
+                "totalPages", submissions.getTotalPages(),
+                "last", submissions.isLast()
+        ));
     }
 }
