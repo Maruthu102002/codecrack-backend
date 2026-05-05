@@ -1,5 +1,6 @@
 package com.codecrack.config;
 
+import com.codecrack.filter.RateLimitingFilter;
 import com.codecrack.repository.UserRepository;
 import com.codecrack.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final RateLimitingFilter rateLimitingFilter;
     private final UserRepository userRepository;
 
     @Bean
@@ -33,6 +35,7 @@ public class SecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
+                                "/api/auth/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/v3/api-docs/**",
@@ -43,6 +46,8 @@ public class SecurityConfig {
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.disable())
                 )
+                .addFilterBefore(rateLimitingFilter,
+                        UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter,
                         UsernamePasswordAuthenticationFilter.class);
 
