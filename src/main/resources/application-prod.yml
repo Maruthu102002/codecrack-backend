@@ -26,3 +26,15 @@ spring:
 logging:
   level:
     com.codecrack: INFO
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    prometheus:
+      enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true

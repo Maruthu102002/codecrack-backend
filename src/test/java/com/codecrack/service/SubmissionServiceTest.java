@@ -6,6 +6,7 @@ import com.codecrack.model.Verdict;
 import com.codecrack.repository.ProblemRepository;
 import com.codecrack.repository.SubmissionRepository;
 import com.codecrack.repository.TestCaseRepository;
+import com.codecrack.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,7 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.lenient;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,10 +40,13 @@ class SubmissionServiceTest {
     private RabbitTemplate rabbitTemplate;
 
     @Mock
-    private com.codecrack.repository.UserRepository userRepository;
+    private UserRepository userRepository;
 
     @Mock
-    private com.codecrack.service.RedisService redisService;
+    private RedisService redisService;
+
+    @Mock
+    private CodeSanitizationService codeSanitizationService;
 
     @InjectMocks
     private SubmissionService submissionService;
@@ -58,11 +62,13 @@ class SubmissionServiceTest {
                 .difficulty("EASY")
                 .isActive(true)
                 .build();
+
+        lenient().when(codeSanitizationService.sanitizeCode(anyString(), anyString()))
+                .thenReturn(new CodeSanitizationService.SanitizationResult(true, null));
     }
 
     @Test
     void submitCode_ValidSubmission_ReturnsSubmission() {
-        // Arrange
         when(problemRepository.findById(1L)).thenReturn(Optional.of(mockProblem));
         when(testCaseRepository.findByProblemIdOrderByOrderIndexAsc(1L))
                 .thenReturn(new ArrayList<>());
@@ -72,10 +78,8 @@ class SubmissionServiceTest {
             return s;
         });
 
-        // Act
         Submission result = submissionService.submitCode(1L, 1L, "print(1)", "PYTHON");
 
-        // Assert
         assertNotNull(result);
         assertEquals(1L, result.getUserId());
         assertEquals(1L, result.getProblemId());
@@ -84,7 +88,6 @@ class SubmissionServiceTest {
 
     @Test
     void submitCode_WithTestCases_QueuesMessage() {
-        // Arrange
         when(problemRepository.findById(1L)).thenReturn(Optional.of(mockProblem));
 
         com.codecrack.model.TestCase tc = com.codecrack.model.TestCase.builder()
@@ -101,18 +104,15 @@ class SubmissionServiceTest {
             return s;
         });
 
-        // Act
         submissionService.submitCode(1L, 1L, "print(1)", "PYTHON");
 
-        // Assert — RabbitMQ called with 2 args
-        verify(rabbitTemplate, times(1)).convertAndSend(any(), any(Object.class));   }
+        verify(rabbitTemplate, times(1)).convertAndSend(any(), any(Object.class));
+    }
 
     @Test
     void submitCode_InvalidProblem_ThrowsException() {
-        // Arrange
         when(problemRepository.findById(99L)).thenReturn(Optional.empty());
 
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 submissionService.submitCode(1L, 99L, "print(1)", "PYTHON")
         );
@@ -121,7 +121,6 @@ class SubmissionServiceTest {
 
     @Test
     void getSubmission_ValidId_ReturnsSubmission() {
-        // Arrange
         Submission mockSubmission = Submission.builder()
                 .id(1L)
                 .userId(1L)
@@ -131,10 +130,8 @@ class SubmissionServiceTest {
                 .build();
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(mockSubmission));
 
-        // Act
         Submission result = submissionService.getSubmission(1L);
 
-        // Assert
         assertNotNull(result);
         assertEquals(Verdict.ACCEPTED, result.getVerdict());
         assertEquals("PYTHON", result.getLanguage());
@@ -142,12 +139,23 @@ class SubmissionServiceTest {
 
     @Test
     void getSubmission_InvalidId_ThrowsException() {
-        // Arrange
         when(submissionRepository.findById(99L)).thenReturn(Optional.empty());
 
-        // Act & Assert
         assertThrows(RuntimeException.class, () ->
                 submissionService.getSubmission(99L)
         );
+    }
+
+    @Test
+    void updateVerdict_AlreadyProcessed_SkipsUpdate() {
+        Submission processed = Submission.builder()
+                .id(1L)
+                .verdict(Verdict.ACCEPTED)
+                .build();
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(processed));
+
+        submissionService.updateVerdict(1L, Verdict.WRONG_ANSWER, 100, 256, null);
+
+        verify(submissionRepository, never()).save(any());
     }
 }
