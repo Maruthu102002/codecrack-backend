@@ -15,11 +15,11 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
   data:
     redis:
-      host: redis
+      host: ${SPRING_DATA_REDIS_HOST:redis}
       port: 6379
       password:
   rabbitmq:
-    host: rabbitmq
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
     port: 5672
     username: guest
     password: guest
@@ -30,10 +30,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: "*"
+      base-path: /actuator
   endpoint:
     prometheus:
       enabled: true
+    health:
+      show-details: always
   prometheus:
     metrics:
       export:
